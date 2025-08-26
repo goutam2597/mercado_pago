@@ -133,7 +133,7 @@ class MPCheckoutPro {
 
     return MPCheckoutResult(
       preferenceId: prefId,
-      paymentId: confirmedPaymentId!.isNotEmpty == true ? confirmedPaymentId : (fromUrlPaymentId.isNotEmpty ? fromUrlPaymentId : null),
+      paymentId: confirmedPaymentId?.isNotEmpty == true ? confirmedPaymentId : (fromUrlPaymentId.isNotEmpty ? fromUrlPaymentId : null),
       status: finalStatus,
       raw: {
         'preference': pref,
