@@ -1,5 +1,6 @@
-/// A Calculator.
-class Calculator {
-  /// Returns [value] plus 1.
-  int addOne(int value) => value + 1;
-}
+library mp_checkout_pro_flutter;
+
+export 'lib/src/mp_config.dart';
+export 'lib/src/mp_models.dart';
+export 'lib/src/checkout_webview.dart';
+export 'lib/src/mp_checkout_pro.dart';
