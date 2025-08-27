@@ -1,18 +1,27 @@
-enum MPCheckoutMode { webview, external } // external = url_launcher
+enum MPCheckoutEnvStrategy {
+  auto,    // default: force sandbox when TEST token, else use init_point
+  sandbox, // always sandbox redirect
+  prod,    // always production redirect (not recommended with TEST token)
+}
 
 class MPConfig {
   /// Mercado Pago Access Token (use TEST-... for sandbox)
   final String accessToken;
 
-  /// Country TLD used if we need to force sandbox URL (e.g., 'br', 'ar', 'mx')
-  final String regionTld;
+  /// Country TLD used to compose sandbox redirect if needed (e.g. 'br','ar','mx','cl')
+  /// If null, it will be inferred from currency_id when possible, otherwise 'br'.
+  final String? regionTld;
 
-  /// Enable log prints
+  /// How to choose the checkout URL.
+  final MPCheckoutEnvStrategy envStrategy;
+
+  /// Enable console logs
   final bool enableLogs;
 
   const MPConfig({
     required this.accessToken,
-    this.regionTld = 'br',
+    this.regionTld,
+    this.envStrategy = MPCheckoutEnvStrategy.auto,
     this.enableLogs = true,
   });
 
@@ -21,8 +30,8 @@ class MPConfig {
 
 class MPCheckoutResult {
   final String preferenceId;
-  final String? paymentId;
-  /// APPROVED | PENDING | REJECTED | UNKNOWN  (client-only: conservative)
+  final String? paymentId; // client-only demo keeps this null
+  /// APPROVED | PENDING | REJECTED | UNKNOWN (we keep it conservative client-side)
   final String status;
   final Map<String, dynamic> raw;
 

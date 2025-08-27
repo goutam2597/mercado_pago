@@ -3,9 +3,12 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 typedef ReturnHandler = void Function(Uri uri);
 
+/// Opens Checkout Pro inside a WebView.
+/// If you provide an HTTPS [returnTargets] page (your "bounce" page),
+/// this widget intercepts it and closes automatically.
 class CheckoutWebView extends StatefulWidget {
   final String checkoutUrl;
-  final List<Uri> returnTargets; // HTTPS back_urls or custom scheme bounces
+  final List<Uri> returnTargets; // usually your HTTPS bounce page(s)
   final ReturnHandler onReturn;
   final String? title;
 
@@ -31,6 +34,7 @@ class _CheckoutWebViewState extends State<CheckoutWebView> {
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0x00000000))
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) => setState(() => _loading = true),
