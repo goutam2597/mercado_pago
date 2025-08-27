@@ -1,20 +1,29 @@
+enum MPCheckoutMode { webview, external } // external = url_launcher
+
 class MPConfig {
-  /// Mercado Pago Access Token (use TEST-... token for sandbox)
+  /// Mercado Pago Access Token (use TEST-... for sandbox)
   final String accessToken;
 
-  /// Enable console logs
+  /// Country TLD used if we need to force sandbox URL (e.g., 'br', 'ar', 'mx')
+  final String regionTld;
+
+  /// Enable log prints
   final bool enableLogs;
 
   const MPConfig({
     required this.accessToken,
+    this.regionTld = 'br',
     this.enableLogs = true,
   });
+
+  bool get isTest => accessToken.startsWith('TEST-');
 }
 
 class MPCheckoutResult {
   final String preferenceId;
   final String? paymentId;
-  final String status; // APPROVED | PENDING | REJECTED | UNKNOWN
+  /// APPROVED | PENDING | REJECTED | UNKNOWN  (client-only: conservative)
+  final String status;
   final Map<String, dynamic> raw;
 
   const MPCheckoutResult({

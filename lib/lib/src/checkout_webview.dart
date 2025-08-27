@@ -5,7 +5,7 @@ typedef ReturnHandler = void Function(Uri uri);
 
 class CheckoutWebView extends StatefulWidget {
   final String checkoutUrl;
-  final List<Uri> returnTargets;
+  final List<Uri> returnTargets; // HTTPS back_urls or custom scheme bounces
   final ReturnHandler onReturn;
   final String? title;
 
