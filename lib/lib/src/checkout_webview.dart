@@ -5,7 +5,7 @@ typedef ReturnHandler = void Function(Uri uri);
 
 class CheckoutWebView extends StatefulWidget {
   final String checkoutUrl;
-  final List<Uri> returnTargets; // back_urls (success/pending/failure)
+  final List<Uri> returnTargets;
   final ReturnHandler onReturn;
   final String? title;
 
@@ -50,7 +50,6 @@ class _CheckoutWebViewState extends State<CheckoutWebView> {
   }
 
   bool _isReturnUrl(Uri u) {
-    // matches any configured back_url target (scheme+host+path)
     for (final t in widget.returnTargets) {
       final exact = u.scheme == t.scheme && u.host == t.host && u.path == t.path;
       final prefix = u.toString().startsWith(t.toString());

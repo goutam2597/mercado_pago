@@ -1,84 +1,100 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
 import 'checkout_webview.dart';
 import 'mp_models.dart';
 
-/// Client-only Checkout Pro opener for a pre-created preference.
-/// Supply either a full init URL or a `prefId` (we'll compose a redirect URL).
-class MPCheckoutHosted {
-  /// Open Checkout Pro.
-  ///
-  /// [region] affects the domain used if you pass only `prefId`.
-  /// Examples:
-  ///   'br' -> sandbox.mercadopago.com.br
-  ///   'ar' -> sandbox.mercadopago.com.ar
-  ///   'mx' -> sandbox.mercadopago.com.mx
-  static Future<MPCheckoutResult> open({
+class MPCheckoutPro {
+  static Future<MPCheckoutResult> startPayment({
     required BuildContext context,
-    String? initUrl,             // full URL like sandbox_init_point/init_point
-    String? prefId,              // e.g., "TEST-1234-...-..."; if set, we build URL
-    String region = 'br',        // country TLD for redirect domain
-    String? appBarTitle,
-    required List<String> backUrls, // success/pending/failure (https)
+    required MPConfig config,
+    required double amount,
+    required String currencyId,
+    required String title,
+    String description = '',
+    String? returnUrl, // HTTPS bounce page recommended
+    String? payerEmail,
   }) async {
-    assert(
-    initUrl != null || prefId != null,
-    'Provide either initUrl or prefId',
+    final externalRef = 'ORD_${DateTime.now().millisecondsSinceEpoch}';
+
+    final payload = {
+      'items': [
+        {
+          'title': title,
+          'description': description,
+          'quantity': 1,
+          'currency_id': currencyId,
+          'unit_price': amount,
+        }
+      ],
+      'external_reference': externalRef,
+      if (payerEmail != null) 'payer': {'email': payerEmail},
+      if (returnUrl != null && returnUrl.startsWith('http'))
+        'back_urls': {
+          'success': returnUrl,
+          'pending': returnUrl,
+          'failure': returnUrl,
+        },
+      if (returnUrl != null && returnUrl.startsWith('http'))
+        'auto_return': 'approved',
+    };
+
+    final createRes = await http.post(
+      Uri.parse('https://api.mercadopago.com/checkout/preferences'),
+      headers: {
+        'Authorization': 'Bearer ${config.accessToken}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(payload),
     );
 
-    // Build a redirect URL if only prefId is provided.
-    // Official docs show query key 'pref_id'. Some logs show 'preference-id'.
-    // We'll prefer 'pref_id' and still accept the other on arrival.
-    final checkoutUrl = initUrl ??
-        'https://sandbox.mercadopago.com.$region/checkout/v1/redirect?pref_id=$prefId';
+    if (config.enableLogs) {
+      print('[MP] create ${createRes.statusCode} ${createRes.body}');
+    }
 
-    // Prepare return targets
-    final targets = backUrls
-        .where((s) => s.isNotEmpty)
-        .map((s) => Uri.parse(s))
-        .toList(growable: false);
+    if (createRes.statusCode != 201 && createRes.statusCode != 200) {
+      throw MPException('Create failed: ${createRes.statusCode} ${createRes.body}');
+    }
+
+    final body = jsonDecode(createRes.body) as Map<String, dynamic>;
+    final prefId = (body['id'] ?? '').toString();
+    final checkoutUrl = (body['sandbox_init_point'] ?? body['init_point']).toString();
 
     Uri? returned;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CheckoutWebView(
-          checkoutUrl: checkoutUrl,
-          returnTargets: targets,
-          onReturn: (uri) => returned = uri,
-          title: appBarTitle ?? 'Mercado Pago',
+    if (returnUrl != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CheckoutWebView(
+            checkoutUrl: checkoutUrl,
+            returnTargets: [Uri.parse(returnUrl)],
+            onReturn: (uri) => returned = uri,
+            title: 'Mercado Pago',
+          ),
         ),
-      ),
-    );
-
-    final uri = returned;
-    final qp = Map<String, String>.from(uri?.queryParameters ?? {});
-
-    // Try both keys we’ve seen in the wild:
-    final prefIdFromUrl = qp['pref_id'] ?? qp['preference-id'] ?? prefId;
-
-    // Common return params (varies by method/region; map conservatively):
-    // - collection_status: approved / pending / rejected / null
-    // - status: approved / pending / failure
-    // - payment_id / collection_id
-    final rawStatus =
-    (qp['collection_status'] ?? qp['status'] ?? 'unknown').toString();
-    final normalized = _normalizeStatus(rawStatus);
-
-    final paymentId = qp['payment_id'] ?? qp['collection_id'];
+      );
+    } else {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CheckoutWebView(
+            checkoutUrl: checkoutUrl,
+            returnTargets: const [],
+            onReturn: (_) {},
+            title: 'Mercado Pago',
+          ),
+        ),
+      );
+    }
 
     return MPCheckoutResult(
-      status: normalized,
-      paymentId: paymentId,
-      preferenceId: prefIdFromUrl,
-      params: qp,
-      returnUri: uri?.toString(),
+      preferenceId: prefId,
+      paymentId: null, // optional: implement /v1/payments/search for real id
+      status: 'PENDING', // we don’t know yet; use webhooks in production
+      raw: {
+        'preference': body,
+        'external_reference': externalRef,
+        'returnUri': returned?.toString(),
+      },
     );
-  }
-
-  static String _normalizeStatus(String s) {
-    final t = s.toLowerCase();
-    if (t.contains('approved') || t == 'success' || t == 'approved') return 'APPROVED';
-    if (t.contains('pending')) return 'PENDING';
-    if (t.contains('rejected') || t.contains('failure') || t.contains('failed')) return 'REJECTED';
-    return 'UNKNOWN';
   }
 }

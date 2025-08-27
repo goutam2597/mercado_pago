@@ -1,17 +1,36 @@
+class MPConfig {
+  /// Mercado Pago Access Token (use TEST-... token for sandbox)
+  final String accessToken;
+
+  /// Enable console logs
+  final bool enableLogs;
+
+  const MPConfig({
+    required this.accessToken,
+    this.enableLogs = true,
+  });
+}
+
 class MPCheckoutResult {
-  final String status; // APPROVED | PENDING | REJECTED | UNKNOWN
+  final String preferenceId;
   final String? paymentId;
-  final String? preferenceId;
-  final Map<String, String> params; // raw query params
-  final String? returnUri;
+  final String status; // APPROVED | PENDING | REJECTED | UNKNOWN
+  final Map<String, dynamic> raw;
 
   const MPCheckoutResult({
+    required this.preferenceId,
     required this.status,
+    required this.raw,
     this.paymentId,
-    this.preferenceId,
-    this.params = const {},
-    this.returnUri,
   });
 
   bool get isApproved => status.toUpperCase() == 'APPROVED';
+}
+
+class MPException implements Exception {
+  final String message;
+  final Object? cause;
+  MPException(this.message, [this.cause]);
+  @override
+  String toString() => 'MPException: $message';
 }
