@@ -1,30 +1,17 @@
 class MPCheckoutResult {
-  /// The preference id used.
-  final String preferenceId;
-
-  /// Mercado Pago payment id if available (from return URL or confirmation call).
+  final String status; // APPROVED | PENDING | REJECTED | UNKNOWN
   final String? paymentId;
-
-  /// SUCCESS | FAILED | PENDING | CANCELED
-  final String status;
-
-  /// Raw snapshots for debugging.
-  final Map<String, dynamic> raw;
+  final String? preferenceId;
+  final Map<String, String> params; // raw query params
+  final String? returnUri;
 
   const MPCheckoutResult({
-    required this.preferenceId,
     required this.status,
-    required this.raw,
     this.paymentId,
+    this.preferenceId,
+    this.params = const {},
+    this.returnUri,
   });
 
-  bool get isSuccess => status.toUpperCase() == 'SUCCESS';
-}
-
-class MPException implements Exception {
-  final String message;
-  final Object? cause;
-  MPException(this.message, [this.cause]);
-  @override
-  String toString() => 'MPException: $message';
+  bool get isApproved => status.toUpperCase() == 'APPROVED';
 }
