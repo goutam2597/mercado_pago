@@ -32,10 +32,9 @@ class _CheckoutWebViewState extends State<CheckoutWebView> {
   void initState() {
     super.initState();
 
-    // 1) Choose platform-specific creation params (NO .instance on WebKit)
+    // Create platform params (no .instance on WebKit)
     PlatformWebViewControllerCreationParams params =
     const PlatformWebViewControllerCreationParams();
-
     if (WebViewPlatform.instance is WebKitWebViewPlatform) {
       params = WebKitWebViewControllerCreationParams(
         allowsInlineMediaPlayback: true,
@@ -43,7 +42,6 @@ class _CheckoutWebViewState extends State<CheckoutWebView> {
       );
     }
 
-    // 2) Build controller
     final controller = WebViewController.fromPlatformCreationParams(params)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0x00000000))
@@ -52,7 +50,7 @@ class _CheckoutWebViewState extends State<CheckoutWebView> {
           onPageStarted: (_) => setState(() => _loading = true),
           onPageFinished: (_) async {
             setState(() => _loading = false);
-            await _detectAndHandleBlockedMerchant(); // hide MP “not enabled” page
+            await _detectAndHandleBlockedMerchant();
           },
           onNavigationRequest: (req) {
             final uri = Uri.tryParse(req.url);
@@ -66,7 +64,7 @@ class _CheckoutWebViewState extends State<CheckoutWebView> {
         ),
       );
 
-    // 3) Android tweaks
+    // Android extras
     final platformController = controller.platform;
     if (platformController is AndroidWebViewController) {
       AndroidWebViewController.enableDebugging(true);
@@ -74,7 +72,6 @@ class _CheckoutWebViewState extends State<CheckoutWebView> {
       platformController.setJavaScriptMode(JavaScriptMode.unrestricted);
     }
 
-    // 4) Load
     controller.loadRequest(Uri.parse(widget.checkoutUrl));
     _controller = controller;
   }
@@ -88,6 +85,7 @@ class _CheckoutWebViewState extends State<CheckoutWebView> {
     return false;
   }
 
+  /// Hide MP "merchant cannot receive payments" page (pt/es/en variants).
   Future<void> _detectAndHandleBlockedMerchant() async {
     if (_alreadyHandledBlock) return;
     try {

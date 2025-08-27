@@ -6,20 +6,16 @@ import 'checkout_webview.dart';
 import 'mp_models.dart';
 
 class MPCheckoutPro {
-  /// Create a preference → choose correct checkout URL (sandbox if TEST token) → open in WebView.
+  /// Create a preference → pick proper checkout URL → open in WebView.
   ///
-  /// [returnUrl] should be an HTTPS page you control that immediately bounces to your
-  /// app deep link if you want the WebView to auto-close:
-  ///   <script>
-  ///     const q = new URLSearchParams(location.search);
-  ///     const s = q.get('status') || q.get('collection_status') || 'pending';
-  ///     location.replace('myapp://payment-return?status=' + encodeURIComponent(s));
-  ///   </script>
+  /// [returnUrl] should be an HTTPS page you control that (optionally) bounces to
+  /// a custom scheme so the WebView can auto-close:
+  ///   location.replace('myapp://payment-return?status=' + encodeURIComponent(status));
   static Future<MPCheckoutResult> startPayment({
     required BuildContext context,
     required MPConfig config,
     required double amount,
-    required String currencyId,  // 'BRL','ARS','MXN','CLP', etc.
+    required String currencyId,  // 'BRL','ARS','MXN','CLP','CO','PE','UY'
     required String title,
     String description = '',
     String? returnUrl,           // HTTPS recommended; optional
@@ -27,7 +23,7 @@ class MPCheckoutPro {
   }) async {
     final externalRef = 'ORD_${DateTime.now().millisecondsSinceEpoch}';
 
-    // --- Build preference payload
+    // Build preference payload
     final payload = {
       'items': [
         {
@@ -45,7 +41,7 @@ class MPCheckoutPro {
       if (returnUrl != null && returnUrl.startsWith('http')) 'auto_return': 'approved',
     };
 
-    // --- Create preference
+    // Create preference
     final createRes = await http.post(
       Uri.parse('https://api.mercadopago.com/checkout/preferences'),
       headers: {
@@ -71,14 +67,13 @@ class MPCheckoutPro {
     final sandboxInit = (body['sandbox_init_point'] ?? '').toString();
     final initPoint   = (body['init_point'] ?? '').toString();
 
-    // --- Choose the correct checkout URL to avoid the prod error screen
-    final region = config.regionTld ?? _tldForCurrency(currencyId) ?? 'br';
+    // Choose checkout URL per strategy + token type
     final checkoutUrl = _chooseCheckoutUrl(
       sandboxInitPoint: sandboxInit,
       initPoint: initPoint,
       prefId: prefId,
       isTestToken: config.isTest,
-      regionTld: region,
+      regionTld: config.regionTld,
       strategy: config.envStrategy,
     );
 
@@ -87,7 +82,7 @@ class MPCheckoutPro {
       print('[MP] using URL: $checkoutUrl');
     }
 
-    // --- Open Checkout Pro in WebView & optionally intercept returnUrl
+    // Open WebView & optionally intercept returnUrl
     final targets = <Uri>[];
     if (returnUrl != null && returnUrl.isNotEmpty) {
       targets.add(Uri.parse(returnUrl));
@@ -105,7 +100,7 @@ class MPCheckoutPro {
       ),
     );
 
-    // Client-only demo → conservative status
+    // Client-only demo → conservative PENDING result (use webhooks in prod)
     return MPCheckoutResult(
       preferenceId: prefId,
       paymentId: null,
@@ -127,39 +122,22 @@ class MPCheckoutPro {
     required String regionTld,
     required MPCheckoutEnvStrategy strategy,
   }) {
-    if (strategy == MPCheckoutEnvStrategy.sandbox) {
-      return _forceSandboxRedirect(prefId, regionTld);
-    }
-    if (strategy == MPCheckoutEnvStrategy.prod) {
-      return initPoint.isNotEmpty ? initPoint : sandboxInitPoint;
-    }
-
-    // auto:
-    if (isTestToken) {
-      // Prefer API-provided sandbox URL; otherwise force sandbox to avoid prod error.
-      return sandboxInitPoint.isNotEmpty
-          ? sandboxInitPoint
-          : _forceSandboxRedirect(prefId, regionTld);
-    }
-    // Access token is live → prefer production init_point.
-    return initPoint.isNotEmpty ? initPoint : (sandboxInitPoint.isNotEmpty ? sandboxInitPoint : _forceSandboxRedirect(prefId, regionTld));
-  }
-
-  static String _forceSandboxRedirect(String prefId, String regionTld) {
-    // Example: https://sandbox.mercadopago.com.br/checkout/v1/redirect?pref_id=XYZ
-    return 'https://sandbox.mercadopago.com.$regionTld/checkout/v1/redirect?pref_id=$prefId';
-  }
-
-  static String? _tldForCurrency(String currency) {
-    switch (currency.toUpperCase()) {
-      case 'BRL': return 'br';
-      case 'ARS': return 'ar';
-      case 'MXN': return 'mx';
-      case 'CLP': return 'cl';
-      case 'COP': return 'co';
-      case 'PEN': return 'pe';
-      case 'UYU': return 'uy';
-      default:    return null;
+    switch (strategy) {
+      case MPCheckoutEnvStrategy.sandbox:
+        return _sandboxRedirect(prefId, regionTld);
+      case MPCheckoutEnvStrategy.prod:
+        return initPoint.isNotEmpty ? initPoint : sandboxInitPoint;
+      case MPCheckoutEnvStrategy.auto:
+      default:
+        if (isTestToken) {
+          // Keep it in sandbox to avoid the production-block screen
+          return sandboxInitPoint.isNotEmpty ? sandboxInitPoint : _sandboxRedirect(prefId, regionTld);
+        }
+        // Live token → prefer production init_point
+        return initPoint.isNotEmpty ? initPoint : (sandboxInitPoint.isNotEmpty ? sandboxInitPoint : _sandboxRedirect(prefId, regionTld));
     }
   }
+
+  static String _sandboxRedirect(String prefId, String regionTld) =>
+      'https://sandbox.mercadopago.com.$regionTld/checkout/v1/redirect?pref_id=$prefId';
 }
