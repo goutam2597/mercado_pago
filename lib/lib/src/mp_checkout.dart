@@ -138,5 +138,5 @@ class MPCheckoutPro {
   }
 
   static String _sandboxRedirect(String prefId, String regionTld) =>
-      'https://sandbox.mercadopago.com.$regionTld/checkout/v2/redirect?pref_id=$prefId';
+      'https://sandbox.mercadopago.com.$regionTld/checkout/v1/redirect?pref_id=$prefId';
 }
