@@ -6,25 +6,24 @@ import 'checkout_webview.dart';
 import 'mp_models.dart';
 
 class MPCheckoutPro {
-  /// Create a preference → open Checkout Pro in a WebView.
+  /// Create a preference → pick proper checkout URL → open in WebView.
   ///
-  /// [currencyId] examples: 'ARS','BRL','MXN','CLP','COP','PEN','UYU','PYG', ...
-  /// [returnUrl] should be an HTTPS page you control; it may bounce to a custom
-  /// scheme so the WebView can auto-close, e.g.:
+  /// [returnUrl] should be an HTTPS page you control that (optionally) bounces to
+  /// a custom scheme so the WebView can auto-close:
   ///   location.replace('myapp://payment-return?status=' + encodeURIComponent(status));
   static Future<MPCheckoutResult> startPayment({
     required BuildContext context,
     required MPConfig config,
     required double amount,
-    required String currencyId,
+    required String currencyId,  // 'BRL','ARS','MXN','CLP','CO','PE','UY'
     required String title,
     String description = '',
-    String? returnUrl, // HTTPS recommended; optional
+    String? returnUrl,           // HTTPS recommended; optional
     String? payerEmail,
   }) async {
     final externalRef = 'ORD_${DateTime.now().millisecondsSinceEpoch}';
 
-    // 1) Build preference payload
+    // Build preference payload
     final payload = {
       'items': [
         {
@@ -33,21 +32,16 @@ class MPCheckoutPro {
           'quantity': 1,
           'currency_id': currencyId,
           'unit_price': amount,
-        },
+        }
       ],
       'external_reference': externalRef,
       if (payerEmail != null) 'payer': {'email': payerEmail},
       if (returnUrl != null && returnUrl.startsWith('http'))
-        'back_urls': {
-          'success': returnUrl,
-          'pending': returnUrl,
-          'failure': returnUrl,
-        },
-      if (returnUrl != null && returnUrl.startsWith('http'))
-        'auto_return': 'approved',
+        'back_urls': {'success': returnUrl, 'pending': returnUrl, 'failure': returnUrl},
+      if (returnUrl != null && returnUrl.startsWith('http')) 'auto_return': 'approved',
     };
 
-    // 2) Create preference (server-side token!)
+    // Create preference
     final createRes = await http.post(
       Uri.parse('https://api.mercadopago.com/checkout/preferences'),
       headers: {
@@ -63,9 +57,7 @@ class MPCheckoutPro {
     }
 
     if (createRes.statusCode != 201 && createRes.statusCode != 200) {
-      throw MPException(
-        'Preference create failed: ${createRes.statusCode} ${createRes.body}',
-      );
+      throw MPException('Preference create failed: ${createRes.statusCode} ${createRes.body}');
     }
 
     final body = jsonDecode(createRes.body) as Map<String, dynamic>;
@@ -73,14 +65,15 @@ class MPCheckoutPro {
     if (prefId.isEmpty) throw MPException('Missing preference id');
 
     final sandboxInit = (body['sandbox_init_point'] ?? '').toString();
-    final initPoint = (body['init_point'] ?? '').toString();
+    final initPoint   = (body['init_point'] ?? '').toString();
 
-    // 3) Choose the best checkout URL
+    // Choose checkout URL per strategy + token type
     final checkoutUrl = _chooseCheckoutUrl(
       sandboxInitPoint: sandboxInit,
       initPoint: initPoint,
       prefId: prefId,
       isTestToken: config.isTest,
+      regionTld: config.regionTld,
       strategy: config.envStrategy,
     );
 
@@ -89,7 +82,7 @@ class MPCheckoutPro {
       print('[MP] using URL: $checkoutUrl');
     }
 
-    // 4) Open WebView & optionally intercept returnUrl
+    // Open WebView & optionally intercept returnUrl
     final targets = <Uri>[];
     if (returnUrl != null && returnUrl.isNotEmpty) {
       targets.add(Uri.parse(returnUrl));
@@ -107,7 +100,7 @@ class MPCheckoutPro {
       ),
     );
 
-    // In real apps, confirm via webhooks or Payments API.
+    // Client-only demo → conservative PENDING result (use webhooks in prod)
     return MPCheckoutResult(
       preferenceId: prefId,
       paymentId: null,
@@ -121,42 +114,30 @@ class MPCheckoutPro {
     );
   }
 
-  /// Safer URL picker:
-  /// - With test tokens, prefer `init_point` (works in sandbox), fallback to sandbox_init_point.
-  /// - With live tokens, use `init_point`, fallback to sandbox_init_point.
-  /// - Only if both missing, synthesize a sandbox redirect as last resort.
   static String _chooseCheckoutUrl({
     required String sandboxInitPoint,
     required String initPoint,
     required String prefId,
     required bool isTestToken,
+    required String regionTld,
     required MPCheckoutEnvStrategy strategy,
   }) {
-    String? pick;
-
     switch (strategy) {
       case MPCheckoutEnvStrategy.sandbox:
-        pick = sandboxInitPoint.isNotEmpty ? sandboxInitPoint : initPoint;
-        break;
+        return _sandboxRedirect(prefId, regionTld);
       case MPCheckoutEnvStrategy.prod:
-        pick = initPoint.isNotEmpty ? initPoint : sandboxInitPoint;
-        break;
+        return initPoint.isNotEmpty ? initPoint : sandboxInitPoint;
       case MPCheckoutEnvStrategy.auto:
+      default:
         if (isTestToken) {
-          // Test token → prefer init_point (stable in WebView), otherwise sandbox.
-          pick = initPoint.isNotEmpty ? initPoint : sandboxInitPoint;
-        } else {
-          pick = initPoint.isNotEmpty ? initPoint : sandboxInitPoint;
+          // Keep it in sandbox to avoid the production-block screen
+          return sandboxInitPoint.isNotEmpty ? sandboxInitPoint : _sandboxRedirect(prefId, regionTld);
         }
+        // Live token → prefer production init_point
+        return initPoint.isNotEmpty ? initPoint : (sandboxInitPoint.isNotEmpty ? sandboxInitPoint : _sandboxRedirect(prefId, regionTld));
     }
-
-    if (pick.isEmpty) {
-      // Last-chance fallback: build a sandbox redirect if the API didn’t return links.
-      // NOTE: prefer not to rely on this—MP may change paths. Argentina example shown.
-      pick =
-          'https://sandbox.mercadopago.com.ar/mla/checkout/pay?pref_id=$prefId';
-    }
-
-    return pick;
   }
+
+  static String _sandboxRedirect(String prefId, String regionTld) =>
+      'https://sandbox.mercadopago.com.$regionTld/checkout/v2/redirect?pref_id=$prefId';
 }
