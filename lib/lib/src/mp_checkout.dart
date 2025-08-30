@@ -128,8 +128,7 @@ class MPCheckoutPro {
       case MPCheckoutEnvStrategy.prod:
         return initPoint.isNotEmpty ? initPoint : sandboxInitPoint;
       case MPCheckoutEnvStrategy.auto:
-      default:
-        if (isTestToken) {
+      if (isTestToken) {
           // Keep it in sandbox to avoid the production-block screen
           return sandboxInitPoint.isNotEmpty ? sandboxInitPoint : _sandboxRedirect(prefId, regionTld);
         }
