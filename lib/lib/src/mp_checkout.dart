@@ -154,7 +154,7 @@ class MPCheckoutPro {
       // Last-chance fallback: build a sandbox redirect if the API didn’t return links.
       // NOTE: prefer not to rely on this—MP may change paths. Argentina example shown.
       pick =
-          'https://sandbox.mercadopago.com.ar/checkout/v1/redirect?pref_id=$prefId';
+          'https://sandbox.mercadopago.com.ar/mla/checkout/v1/redirect?pref_id=$prefId';
     }
 
     return pick;
